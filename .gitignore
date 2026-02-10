@@ -1,5 +1,7 @@
 .env
 *.exe
+*~
+telegram-approval-bot
 vendor/
 .DS_Store
 tmp/
@@ -7,3 +9,6 @@ brain/
 implementation_plan.md
 task.md
 walkthrough.md
+node_modules/
+bin/
+obj/
