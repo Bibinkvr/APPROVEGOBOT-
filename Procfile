@@ -1,0 +1,1 @@
+web: ./telegram-approval-bot

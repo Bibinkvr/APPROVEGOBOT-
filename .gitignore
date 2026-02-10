@@ -1,0 +1,9 @@
+.env
+*.exe
+vendor/
+.DS_Store
+tmp/
+brain/
+implementation_plan.md
+task.md
+walkthrough.md
