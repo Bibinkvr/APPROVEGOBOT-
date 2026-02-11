@@ -37,22 +37,26 @@ func main() {
 	// Notify Admin
 	go approvalBot.SendMessage(cfg.AdminID, "🤖 <b>Bot Started</b>")
 
+	// Shared Health Check
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
+
 	if os.Getenv("MODE") == "webhook" {
 		http.HandleFunc(cfg.SecretPath, approvalBot.WebhookHandler)
-		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
-
-		server := &http.Server{Addr: ":" + cfg.Port}
 		log.Printf("Webhook active on port %s", cfg.Port)
-
-		go func() {
-			sigChan := make(chan os.Signal, 1)
-			signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-			<-sigChan
-			server.Close()
-		}()
-		_ = server.ListenAndServe()
 	} else {
-		log.Println("Polling mode active")
-		approvalBot.StartPolling()
+		log.Printf("Polling mode active. Health check on port %s", cfg.Port)
+		go approvalBot.StartPolling()
+	}
+
+	server := &http.Server{Addr: ":" + cfg.Port}
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		<-sigChan
+		server.Close()
+	}()
+
+	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		log.Fatalf("Server failed: %v", err)
 	}
 }
