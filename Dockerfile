@@ -11,7 +11,7 @@ RUN go mod download
 COPY . .
 
 # Build binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o bot .
+RUN CGO_ENABLED=0 GOOS=linux go build -o telegram-approval-bot .
 
 # Final Stage
 FROM alpine:latest
@@ -19,7 +19,7 @@ FROM alpine:latest
 WORKDIR /root/
 
 # Copy binary from builder
-COPY --from=builder /app/bot .
+COPY --from=builder /app/telegram-approval-bot .
 
 # Expose port
 EXPOSE 8080

@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"telegram-approval-bot/models"
@@ -18,10 +19,20 @@ type Database struct {
 }
 
 func InitDB(uri string) *Database {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	client, _ := mongo.Connect(ctx, options.Client().ApplyURI(uri).SetMaxPoolSize(50))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri).SetMaxPoolSize(50))
+	if err != nil {
+		log.Fatalf("Critical: Database connection failed: %v", err)
+	}
+
+	// Verify connection
+	err = client.Ping(ctx, nil)
+	if err != nil {
+		log.Fatalf("Critical: Database ping failed: %v", err)
+	}
+
 	db := client.Database("botdb")
 
 	d := &Database{

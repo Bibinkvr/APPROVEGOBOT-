@@ -22,6 +22,11 @@ func main() {
 	if cfg.BotToken == "" {
 		log.Fatal("BOT_TOKEN is required")
 	}
+	if cfg.MongoURI == "" {
+		log.Fatal("MONGODB_URI is required")
+	}
+
+	log.Printf("Starting bot (Admin: %d, Port: %s)", cfg.AdminID, cfg.Port)
 
 	database := db.InitDB(cfg.MongoURI)
 	approvalBot := bot.NewBot(cfg, database)
