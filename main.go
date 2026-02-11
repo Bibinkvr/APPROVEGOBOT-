@@ -4,8 +4,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"telegram-approval-bot/bot"
 	"telegram-approval-bot/config"
@@ -38,25 +36,26 @@ func main() {
 	go approvalBot.SendMessage(cfg.AdminID, "🤖 <b>Bot Started</b>")
 
 	// Shared Health Check
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("OK")) })
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 
 	if os.Getenv("MODE") == "webhook" {
 		http.HandleFunc(cfg.SecretPath, approvalBot.WebhookHandler)
-		log.Printf("Webhook active on port %s", cfg.Port)
+		log.Printf("Starting in WEBHOOK mode on port %s", cfg.Port)
 	} else {
-		log.Printf("Polling mode active. Health check on port %s", cfg.Port)
+		log.Printf("Starting in POLLING mode. Health server on port %s", cfg.Port)
 		go approvalBot.StartPolling()
 	}
 
-	server := &http.Server{Addr: ":" + cfg.Port}
-	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		<-sigChan
-		server.Close()
-	}()
+	// Always listen on all interfaces to satisfy Render's port binding check.
+	// Render expects a successful bind to its detected port within a few minutes.
+	addr := ":" + cfg.Port
+	log.Printf("HTTP Server now binding to %s", addr)
 
-	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatalf("Server failed: %v", err)
+	err := http.ListenAndServe(addr, nil)
+	if err != nil {
+		log.Fatalf("Critical: HTTP Server failed to bind: %v", err)
 	}
 }
