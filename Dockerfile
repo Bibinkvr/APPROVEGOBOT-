@@ -25,4 +25,4 @@ COPY --from=builder /app/telegram-approval-bot .
 EXPOSE 8080
 
 # Run the bot
-CMD ["./bot"]
+CMD ["./telegram-approval-bot"]
