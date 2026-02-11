@@ -20,6 +20,7 @@ type Bot struct {
 	HTTPClient *http.Client
 	JobQueue   chan models.Update
 	WorkerPool int
+	BaseURL    string // Pre-calculated URL for speed
 }
 
 func NewBot(cfg config.Config, database *db.Database) *Bot {
@@ -31,11 +32,13 @@ func NewBot(cfg config.Config, database *db.Database) *Bot {
 				MaxIdleConns:        100,
 				IdleConnTimeout:     90 * time.Second,
 				MaxIdleConnsPerHost: 100,
+				ForceAttemptHTTP2:   true,
 			},
 			Timeout: 40 * time.Second,
 		},
 		JobQueue:   make(chan models.Update, 1000),
-		WorkerPool: 20, // Concurrency Level
+		WorkerPool: 30, // Increased concurrency
+		BaseURL:    "https://api.telegram.org/bot" + cfg.BotToken,
 	}
 }
 
@@ -83,7 +86,12 @@ func (b *Bot) StartPolling() {
 		}
 
 		for _, update := range updateResp.Result {
-			b.JobQueue <- update
+			// SPEED-FIX: Handle join requests INSTANTLY by skipping the queue
+			if update.ChatJoinRequest != nil {
+				go b.HandleJoinRequest(update.ChatJoinRequest)
+			} else {
+				b.JobQueue <- update
+			}
 			offset = update.UpdateID + 1
 		}
 	}
@@ -182,10 +190,10 @@ func (b *Bot) IsAdmin(id int64) bool {
 }
 
 func (b *Bot) ApproveRequest(chatID, userID int64) error {
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/approveChatJoinRequest", b.Config.BotToken)
-	data := map[string]interface{}{
-		"chat_id": chat_id_to_string(chatID),
-		"user_id": userID,
+	url := b.BaseURL + "/approveChatJoinRequest"
+	data := models.ApproveChatJoinRequest{
+		ChatID: chat_id_to_string(chatID),
+		UserID: userID,
 	}
 	resp, err := b.callTelegram(url, data)
 	if err != nil {
@@ -196,17 +204,17 @@ func (b *Bot) ApproveRequest(chatID, userID int64) error {
 }
 
 func (b *Bot) SendMessage(chatID int64, text string, keyboards ...models.InlineKeyboardMarkup) {
-	data := map[string]interface{}{
-		"chat_id":    fmt.Sprintf("%d", chatID),
-		"text":       text,
-		"parse_mode": "HTML",
+	data := models.SendMessageRequest{
+		ChatID:    fmt.Sprintf("%d", chatID),
+		Text:      text,
+		ParseMode: "HTML",
 	}
 	if len(keyboards) > 0 && len(keyboards[0].InlineKeyboard) > 0 {
-		data["reply_markup"] = keyboards[0]
+		data.ReplyMarkup = &keyboards[0]
 	}
 
 	payload, _ := json.Marshal(data)
-	resp, err := b.HTTPClient.Post(fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", b.Config.BotToken), "application/json", bytes.NewBuffer(payload))
+	resp, err := b.HTTPClient.Post(b.BaseURL+"/sendMessage", "application/json", bytes.NewBuffer(payload))
 	if err == nil {
 		resp.Body.Close()
 	}
@@ -238,6 +246,12 @@ func (b *Bot) WebhookHandler(w http.ResponseWriter, r *http.Request) {
 	var update models.Update
 	if err := json.NewDecoder(r.Body).Decode(&update); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	// SPEED-FIX: Handle join requests INSTANTLY by skipping the queue
+	if update.ChatJoinRequest != nil {
+		go b.HandleJoinRequest(update.ChatJoinRequest)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	select {

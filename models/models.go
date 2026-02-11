@@ -55,3 +55,16 @@ type InlineKeyboardButton struct {
 	Text string `json:"text"`
 	URL  string `json:"url,omitempty"`
 }
+
+// Request Types for Speed Optimization
+type ApproveChatJoinRequest struct {
+	ChatID string `json:"chat_id"`
+	UserID int64  `json:"user_id"`
+}
+
+type SendMessageRequest struct {
+	ChatID      string                `json:"chat_id"`
+	Text        string                `json:"text"`
+	ParseMode   string                `json:"parse_mode,omitempty"`
+	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+}
