@@ -80,3 +80,7 @@ func (d *Database) GetAllUserIDs() ([]int64, error) {
 	}
 	return ids, nil
 }
+
+func (d *Database) GetTotalUsers() (int64, error) {
+	return d.Users.CountDocuments(context.Background(), bson.M{})
+}

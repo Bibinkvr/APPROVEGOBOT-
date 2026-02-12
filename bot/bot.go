@@ -15,12 +15,20 @@ import (
 )
 
 type Bot struct {
-	Config     config.Config
-	DB         *db.Database
-	HTTPClient *http.Client
-	JobQueue   chan models.Update
-	WorkerPool int
-	BaseURL    string // Pre-calculated URL for speed
+	Config          config.Config
+	DB              *db.Database
+	HTTPClient      *http.Client
+	JobQueue        chan models.Update
+	WorkerPool      int
+	BaseURL         string // Pre-calculated URL for speed
+	BroadcastStatus *BroadcastStatus
+}
+
+type BroadcastStatus struct {
+	IsRunning bool
+	Processed int
+	Total     int
+	StartTime time.Time
 }
 
 func NewBot(cfg config.Config, database *db.Database) *Bot {
@@ -36,9 +44,10 @@ func NewBot(cfg config.Config, database *db.Database) *Bot {
 			},
 			Timeout: 40 * time.Second,
 		},
-		JobQueue:   make(chan models.Update, 1000),
-		WorkerPool: 30, // Increased concurrency
-		BaseURL:    "https://api.telegram.org/bot" + cfg.BotToken,
+		JobQueue:        make(chan models.Update, 1000),
+		WorkerPool:      30, // Increased concurrency
+		BaseURL:         "https://api.telegram.org/bot" + cfg.BotToken,
+		BroadcastStatus: &BroadcastStatus{},
 	}
 }
 
@@ -156,6 +165,24 @@ func (b *Bot) HandleMessage(msg *models.Message) {
 
 	if b.IsAdmin(msg.From.ID) && len(msg.Text) > 11 && msg.Text[:11] == "/broadcast " {
 		go b.StartBroadcast(msg.Text[11:])
+		return
+	}
+
+	if b.IsAdmin(msg.From.ID) && msg.Text == "/stats" {
+		totalUsers, _ := b.DB.GetTotalUsers()
+		status := "Idle"
+		if b.BroadcastStatus.IsRunning {
+			status = fmt.Sprintf("Running 🏃‍♂️\n<b>Progress:</b> %d/%d\n<b>Started:</b> %s",
+				b.BroadcastStatus.Processed, b.BroadcastStatus.Total,
+				b.BroadcastStatus.StartTime.Format("15:04:05"))
+		}
+
+		statsText := fmt.Sprintf("📊 <b>Bot Statistics</b>\n\n"+
+			"<b>Total Users:</b> %d\n"+
+			"<b>Broadcast Status:</b> %s",
+			totalUsers, status)
+
+		b.SendMessage(msg.From.ID, statsText)
 	}
 }
 
@@ -177,12 +204,20 @@ func (b *Bot) StartAdvancedBroadcast(fromChatID, messageID int64) {
 	if err != nil {
 		return
 	}
+
+	b.BroadcastStatus.IsRunning = true
+	b.BroadcastStatus.Total = len(users)
+	b.BroadcastStatus.Processed = 0
+	b.BroadcastStatus.StartTime = time.Now()
+
 	ticker := time.NewTicker(40 * time.Millisecond)
 	defer ticker.Stop()
 	for _, userID := range users {
 		<-ticker.C
 		b.CopyMessage(userID, fromChatID, messageID)
+		b.BroadcastStatus.Processed++
 	}
+	b.BroadcastStatus.IsRunning = false
 }
 
 func (b *Bot) IsAdmin(id int64) bool {
@@ -225,12 +260,20 @@ func (b *Bot) StartBroadcast(text string) {
 	if err != nil {
 		return
 	}
+
+	b.BroadcastStatus.IsRunning = true
+	b.BroadcastStatus.Total = len(users)
+	b.BroadcastStatus.Processed = 0
+	b.BroadcastStatus.StartTime = time.Now()
+
 	ticker := time.NewTicker(40 * time.Millisecond)
 	defer ticker.Stop()
 	for _, userID := range users {
 		<-ticker.C
 		b.SendMessage(userID, text)
+		b.BroadcastStatus.Processed++
 	}
+	b.BroadcastStatus.IsRunning = false
 }
 
 func (b *Bot) callTelegram(url string, data interface{}) (*http.Response, error) {
