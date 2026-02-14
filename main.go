@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"telegram-approval-bot/bot"
 	"telegram-approval-bot/config"
@@ -34,6 +35,19 @@ func main() {
 
 	// Notify Admin
 	go approvalBot.SendMessage(cfg.AdminID, "🤖 <b>Bot Started</b>")
+
+	// Keep-Alive Ping (Prevents Render from spinning down)
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			resp, err := http.Get("http://localhost:" + cfg.Port + "/health")
+			if err == nil {
+				resp.Body.Close()
+				log.Println("Keep-alive ping sent")
+			}
+		}
+	}()
 
 	// Shared Health Check
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
